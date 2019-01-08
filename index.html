@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>title</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/1.30.1/date_fns.min.js"></script>
+  </head>
+  <body>
+    <form id="idForm">
+      <input id="idInput" type="text" />
+      <button id="idButton" type="submit">search</button>
+    </form>
+    <div width="1370" height="684">
+      <canvas id="gradeChart"></canvas>
+    </div>
+    <script>
+
+      var colors = [
+        'rgb(255,0,136)',
+        'rgb(0,242,226)',
+        'rgb(202,217,0)',
+        'rgb(153,128,77)',
+        'rgb(111,57,115)',
+        'rgb(255,166,64)',
+        'rgb(222,115,230)',
+        'rgb(217,0,29)',
+        'rgb(0,140,37)',
+        'rgb(73,89,67)',
+        'rgb(32,242,0)',
+        'rgb(230,172,172)',
+        'rgb(51,51,204)',
+        'rgb(0,119,128)',
+        'rgb(16,41,64)',
+        'rgb(182,222,242)',
+        'rgb(54,119,217)',
+        'rgb(178,71,0)',
+        'rgb(127,64,64)',
+        'rgb(0,0,51)'
+      ]
+
+      var shuffle = xs => xs
+        .map(val => ({ sort: Math.random(), val }))
+        .sort(({ sort: a }, { sort: b }) => a - b)
+        .map(({ val }) => val)
+
+      var day = 24 * 3600 * 1000
+      var roundToDay = unixstamp => (Math.floor((new Date(unixstamp)).getTime() / day) * day) + (day * 0.5)
+
+      var last = xs => xs[xs.length - 1]
+      var zip = as => {
+        if (!as.length) return []
+        var count = as.map(x => x.length).reduce((xs, x) => xs > x ? x : xs, Infinity)
+
+        return Array(count).fill(null).map((_, i) => i)
+          .reduce((xs, i) => xs.concat([as.map(x => x[i])]), [])
+      }
+
+      var ctx = document.getElementById("gradeChart").getContext('2d');
+      var chart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [], datasets: [] },
+        borderWidth: 1,
+        options: {
+          title: { display: true, text: 'Grades' },
+          elements: { point: { radius: 5 } },
+          responsive: true,
+          spanGaps: true,
+          scales: {
+            xAxes: [{
+              display: true,
+              scaleLabel: { display: true, labelString: 'Date' }
+            }],
+            yAxes: [{
+              display: true,
+              ticks: { min: 0, max: 110 },
+              scaleLabel: { display: true, labelString: 'Grade' }
+            }]
+          }
+        }
+      })
+
+      var onReady = studentid => (json = []) => new Promise((resolve, reject) => {
+        var dates = dateFns.eachDay(...json
+          .reduce((xs, [_, data]) => xs.concat(data), [])
+          .reduce((xs, { unixstamp }) => xs.concat(roundToDay(unixstamp)), [])
+          .reduce((xs, x) => xs.includes(x) ? xs : xs.concat(x), [])
+          .reduce(([first, last], x) => [x < first ? x : first, last], [Infinity, Date.now()]))
+          .map(d => roundToDay(parseInt(dateFns.format(d, 'x'), 10)))
+
+        var datasets = json.map(([ label, data ]) => ({
+          label,
+          type: 'line',
+          fill: false,
+          data: Object.entries(data.reduce((xs, { unixstamp, grade }) => Object.assign({}, xs, {
+            [roundToDay(unixstamp)]: grade,
+          }), dates.reduce((xs, x) => Object.assign({ [x]: null }, xs), {})))
+            .sort(([a], [b]) => a - b)
+            .map(([_, grade]) => grade)
+        }))
+
+        var average = {
+          label: 'Average',
+          data: zip(datasets.map(({ data }) => data.reduce((xs, x) => xs.concat(x === null ? last(xs) : x), [])))
+            .map(xs => xs.filter(x => x !== null && x !== undefined))
+            .map(xs => xs.reduce((avg, grade, idx) => ((avg * idx) + grade) / (idx + 1), 100))
+            .map(avg => avg.toFixed(2)),
+          fill: true,
+          backgroundColor: 'rgba(255, 0, 0, 0.25)',
+          borderColor: 'rgba(255, 0, 0, 0.25)',
+        }
+
+        var myColors = shuffle(colors)
+
+        chart.options.title.text = `Grades for ${studentid}`;
+        chart.data.labels = dates.map(now => dateFns.format(new Date(now), 'MMM Do'))
+        chart.data.datasets = [
+          ...datasets,
+          average,
+        ]
+          .map((dataset, idx) => ({
+            backgroundColor: myColors[idx],
+            borderColor: myColors[idx],
+            ...dataset,
+          }))
+        chart.update()
+
+        return resolve(json)
+      })
+
+      var get = studentid => fetch(`${fetchURL}${studentid}`)
+        .then(response => response.json())
+        .then(onReady(studentid))
+
+      document.getElementById('idForm').addEventListener('submit', evt => {
+        evt.preventDefault()
+        const studentid = document.getElementById('idInput').value
+        if (studentid) get(studentid)
+      })
+    </script>
+  </body>
+</html>
