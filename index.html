@@ -92,11 +92,13 @@
           label,
           type: 'line',
           fill: false,
-          data: Object.entries(data.reduce((xs, { unixstamp, grade }) => Object.assign({}, xs, {
-            [roundToDay(unixstamp)]: grade,
-          }), dates.reduce((xs, x) => Object.assign({ [x]: null }, xs), {})))
-            .sort(([a], [b]) => a - b)
-            .map(([_, grade]) => grade)
+          data: Object.entries(data
+            .sort(({ unixstamp: a }, { unixstamp: b }) => a - b)
+            .reduce((xs, { unixstamp, grade }) => Object.assign({}, xs, {
+              [roundToDay(unixstamp)]: grade,
+            }), dates.reduce((xs, x) => Object.assign({ [x]: null }, xs), {})))
+              .sort(([a], [b]) => a - b)
+              .map(([_, grade]) => grade)
         }))
 
         var average = {
