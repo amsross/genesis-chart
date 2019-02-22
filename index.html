@@ -80,25 +80,48 @@
         }
       })
 
+      var composeB = (f, g) => x => f(g(x))
+      var compose = (...fns) => reduce(composeB, x => x)(fns)
+      var pipe = (...fns) => compose(...fns.reverse())
+      var reduce = (f, i) => xs => xs.reduce(f, i)
+      var map = f => xs => xs.map(f)
+
+      var takeLastOfEvery = n => compose(map(last), splitEvery(n))
+      var splitEvery = (n) => ([ head, ...tail ]) => {
+        var list = [ head, ...tail ]
+        var result = [];
+        var idx = 0;
+
+        while (idx < list.length) {
+          result.push(list.slice(idx, idx += n));
+        }
+
+        return result;
+      }
+
+      var fillInBlankDays = (data, dates) => data
+        .sort(({ unixstamp: a }, { unixstamp: b }) => a - b)
+        .reduce((xs, { unixstamp, grade }) => Object.assign({}, xs, {
+          [roundToDay(unixstamp)]: grade,
+        }), dates.reduce((xs, x) => Object.assign({ [x]: null }, xs), {}))
+
       var onReady = studentid => (json = []) => new Promise((resolve, reject) => {
-        var dates = dateFns.eachDay(...json
-          .reduce((xs, [_, data]) => xs.concat(data), [])
-          .reduce((xs, { unixstamp }) => xs.concat(roundToDay(unixstamp)), [])
-          .reduce((xs, x) => xs.includes(x) ? xs : xs.concat(x), [])
-          .reduce(([first, last], x) => [x < first ? x : first, last], [Infinity, Date.now()]))
-          .map(d => roundToDay(parseInt(dateFns.format(d, 'x'), 10)))
+        var findDates = pipe(
+          reduce((xs, [_, data]) => xs.concat(data), []),
+          reduce((xs, { unixstamp }) => xs.concat(roundToDay(unixstamp)), []),
+          reduce((xs, x) => xs.includes(x) ? xs : xs.concat(x), []),
+          reduce(([first, last], x) => [x < first ? x : first, last], [Infinity, Date.now()]))
+
+        var dates = pipe(
+          map(d => roundToDay(parseInt(dateFns.format(d, 'x'), 10))))(dateFns.eachDay(...findDates(json)))
 
         var datasets = json.map(([ label, data ]) => ({
           label,
           type: 'line',
           fill: false,
-          data: Object.entries(data
-            .sort(({ unixstamp: a }, { unixstamp: b }) => a - b)
-            .reduce((xs, { unixstamp, grade }) => Object.assign({}, xs, {
-              [roundToDay(unixstamp)]: grade,
-            }), dates.reduce((xs, x) => Object.assign({ [x]: null }, xs), {})))
-              .sort(([a], [b]) => a - b)
-              .map(([_, grade]) => grade)
+          data: Object.entries(fillInBlankDays(data, dates))
+            .sort(([a], [b]) => a - b)
+            .map(([_, grade]) => grade)
         }))
 
         var average = {
@@ -136,7 +159,7 @@
 
       document.getElementById('idForm').addEventListener('submit', evt => {
         evt.preventDefault()
-        const studentid = document.getElementById('idInput').value
+        var studentid = document.getElementById('idInput').value
         if (studentid) get(studentid)
       })
     </script>
